@@ -50,22 +50,22 @@ trello-clone-app/
 ## Setup Instructions
 
 1. **Clone repository:**
-
-- git clone https://github.com/Manzoor-Khiliriya/trello-clone-app.git
-- cd trello-clone-app
-
+```
+git clone https://github.com/Manzoor-Khiliriya/trello-clone-app.git
+cd trello-clone-app
+```
 2. **Backend Setup:**
-
-- cd backend
-- npm install
-- npm run dev      # Runs server with nodemon on http://localhost:5000
-
+```
+cd backend
+npm install
+npm run dev      # Runs server with nodemon on http://localhost:5000
+```
 3. **Frontend Setup:**
-
-- cd frontend
-- npm install
-- npm run dev      # Runs React app (e.g., http://localhost:5173)
-
+```
+cd frontend
+npm install
+npm run dev      # Runs React app (e.g., http://localhost:5173)
+```
 
 Open in browser:
 Go to http://localhost:5173 / 3000 to see the board.
