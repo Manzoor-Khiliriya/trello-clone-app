@@ -1,7 +1,7 @@
 let boardData = {
     lists: [
         { id: 'todo', title: 'Todo', cards: [
-            { id: '1', title: 'Setup project environment' },
+            { id: '1', title: 'Setup project environment', tags: ["abc"] },
             { id: '2', title: 'Design API endpoints' },
         ]},
         { id: 'in-progress', title: 'In Progress', cards: [

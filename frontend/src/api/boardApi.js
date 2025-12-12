@@ -74,3 +74,27 @@ export const addList = async (title) => {
   }
 };
 
+export const findCardByTag = async (tag) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/card/search?tag=${encodeURIComponent(tag)}`
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+
+    return {
+      lists: [
+        {
+          id: "search-results",
+          title: `Search: ${tag}`,
+          cards: result.data || [],
+        },
+      ],
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+

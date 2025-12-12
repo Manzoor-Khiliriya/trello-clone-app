@@ -11,31 +11,30 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import List from "./List";
 import Card from "./Card";
-import { fetchBoard, moveCard, addList } from "../api/boardApi";
+import { fetchBoard, moveCard, addList, findCardByTag } from "../api/boardApi";
 
 const Board = () => {
-  const [boardData, setBoardData] = useState(null);
+  const [boardData, setBoardData] = useState({ lists: [] });
   const [activeCard, setActiveCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newListTitle, setNewListTitle] = useState("");
   const [addingList, setAddingList] = useState(false);
+  const [tag, setTag] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   useEffect(() => {
     const loadBoard = async () => {
       try {
         const data = await fetchBoard();
-        setBoardData(data);
+        setBoardData({ lists: data.lists || [] });
       } catch (err) {
-        setError("Failed to load board data. Please try again later.");
         console.error(err);
+        setError("Failed to load board data. Please try again later.");
       } finally {
         setLoading(false);
       }
@@ -47,98 +46,84 @@ const Board = () => {
 
   const handleDragStart = (event) => {
     const { active } = event;
-
     const card = boardData.lists
       .flatMap((list) =>
-        list.cards.map((card) => ({
-          ...card,
-          listId: list.id,
-        }))
+        (list.cards || []).map((card) => ({ ...card, listId: list.id }))
       )
       .find((c) => c.id === active.id);
-
     setActiveCard(card || null);
   };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
-
     setActiveCard(null);
-
     if (!over || active.id === over.id) return;
 
-    const activeList = findList(active.data.current.listId);
+    const activeList = findList(active.data.current?.listId);
     const overList = findList(over.data.current?.listId || over.id);
-
     if (!activeList || !overList) return;
 
     const sourceListId = activeList.id;
     const destinationListId = overList.id;
-
-    const activeIndex = activeList.cards.findIndex((card) => card.id === active.id);
-    const overIndex = overList.cards.findIndex((card) => card.id === over.id);
-
-    const cardToMove = activeList.cards[activeIndex];
+    const activeIndex = (activeList.cards || []).findIndex(
+      (c) => c.id === active.id
+    );
+    const overIndex = (overList.cards || []).findIndex((c) => c.id === over.id);
+    const cardToMove = activeList.cards?.[activeIndex];
     if (!cardToMove) return;
 
-    // --- Same list: reorder ---
     if (sourceListId === destinationListId) {
+      // Reorder within same list
       const newCards = arrayMove(activeList.cards, activeIndex, overIndex);
-
       setBoardData((prev) => ({
         ...prev,
         lists: prev.lists.map((list) =>
           list.id === sourceListId ? { ...list, cards: newCards } : list
         ),
       }));
-
-      const movePayload = {
-        sourceListId,
-        destinationListId,
-        cardId: cardToMove.id,
-        sourceIndex: activeIndex,
-        destinationIndex: overIndex,
-      };
-
       try {
-        await moveCard(movePayload);
+        await moveCard({
+          sourceListId,
+          destinationListId,
+          cardId: cardToMove.id,
+          sourceIndex: activeIndex,
+          destinationIndex: overIndex,
+        });
       } catch (err) {
         console.error(err);
-        setError("Reordering failed to save. Rolling back.");
+        setError("Reordering failed. Refreshing board...");
         const data = await fetchBoard();
-        setBoardData(data);
+        setBoardData({ lists: data.lists || [] });
       }
     } else {
-      // --- Different lists: move between lists ---
+      // Move between lists
       const newBoardData = JSON.parse(JSON.stringify(boardData));
-      const newActiveList = newBoardData.lists.find((list) => list.id === sourceListId);
-      const newOverList = newBoardData.lists.find((list) => list.id === destinationListId);
-
+      const newActiveList = newBoardData.lists.find(
+        (l) => l.id === sourceListId
+      );
+      const newOverList = newBoardData.lists.find(
+        (l) => l.id === destinationListId
+      );
       const [movedCard] = newActiveList.cards.splice(activeIndex, 1);
-
-      const insertIndex = overIndex === -1 || overIndex === undefined
-        ? newOverList.cards.length
-        : overIndex;
-
+      const insertIndex =
+        overIndex === -1 || overIndex === undefined
+          ? newOverList.cards?.length || 0
+          : overIndex;
       newOverList.cards.splice(insertIndex, 0, movedCard);
-
       setBoardData(newBoardData);
-
-      const movePayload = {
-        sourceListId,
-        destinationListId,
-        cardId: cardToMove.id,
-        sourceIndex: activeIndex,
-        destinationIndex: insertIndex,
-      };
-
       try {
-        await moveCard(movePayload);
+        await moveCard({
+          sourceListId,
+          destinationListId,
+          cardId: cardToMove.id,
+          sourceIndex: activeIndex,
+          destinationIndex: insertIndex,
+        });
       } catch (err) {
         console.error(err);
-        setError("Moving card between lists failed. Rolling back.");
+        setError("Moving card failed. Refreshing board...");
         const data = await fetchBoard();
-        setBoardData(data);
+        setBoardData({ lists: data.lists || [] });
       }
     }
   };
@@ -150,7 +135,7 @@ const Board = () => {
     setAddingList(true);
     try {
       const updatedBoard = await addList(newListTitle);
-      setBoardData(updatedBoard);
+      setBoardData({ lists: updatedBoard.lists || [] });
       setNewListTitle("");
     } catch (err) {
       console.error(err);
@@ -160,13 +145,26 @@ const Board = () => {
     }
   };
 
+  const handleTagSearch = async () => {
+    const tagValue = tag.trim();
+    if (!tagValue) return;
+    try {
+      const data = await findCardByTag(tagValue);
+      setBoardData({ lists: data.lists || [] });
+    } catch (err) {
+      setError("Tag search failed. Please try again.");
+    }
+  };
+
+  // Render
   if (loading) return <div className="text-gray-600">Loading board...</div>;
   if (error) return <div className="text-red-600 font-bold">{error}</div>;
-  if (!boardData || boardData.lists.length === 0)
+  if (!boardData?.lists?.length)
     return <div className="text-gray-600">No lists available.</div>;
 
   return (
     <>
+      {/* Add new list */}
       <div className="flex space-x-2 py-2">
         <input
           type="text"
@@ -184,6 +182,24 @@ const Board = () => {
         </button>
       </div>
 
+      {/* Tag search */}
+      <div className="flex space-x-2 py-2">
+        <input
+          type="text"
+          placeholder="Search by tag"
+          value={tag}
+          onChange={(e) => setTag(e.target.value)}
+          className="p-2 rounded border w-64 focus:outline-none focus:ring-2 focus:ring-green-400"
+        />
+        <button
+          onClick={handleTagSearch}
+          className="bg-blue-500 cursor-pointer text-white px-3 py-2 rounded hover:bg-blue-600"
+        >
+          Search
+        </button>
+      </div>
+
+      {/* Board lists */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -203,7 +219,13 @@ const Board = () => {
         </div>
 
         <DragOverlay>
-          {activeCard && <Card card={activeCard} id={activeCard.id} listId={activeCard.listId} />}
+          {activeCard && (
+            <Card
+              card={activeCard}
+              id={activeCard.id}
+              listId={activeCard.listId}
+            />
+          )}
         </DragOverlay>
       </DndContext>
     </>
